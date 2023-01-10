@@ -1,5 +1,8 @@
 (ns ch03-sequences.core
-  (:require [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [clojure.java.io :as io]
+            [clojure.set :as s])
+  (:import [java.io File])
   (:gen-class))
 
 (defn -main
@@ -238,3 +241,216 @@
 ;; 1
 ;; 2
 ;; nil
+
+(first (.getBytes "hello"))
+;; => 104
+
+(rest (.getBytes "hello"))
+;; => (101 108 108 111)
+
+(cons (int \h) (.getBytes "ello"))
+;; => (104 101 108 108 111)
+
+(first (System/getProperties))
+;; => #object[java.util.concurrent.ConcurrentHashMap$MapEntry 0xf7662f9 "awt.toolkit=sun.awt.X11.XToolkit"]
+
+(first "hello")
+;; => \h
+
+(rest "hello")
+;; => (\e \l \l \o)
+
+(cons \h "ello")
+;; => (\h \e \l \l \o)
+
+(reverse "hello")
+;; => (\o \l \l \e \h)
+
+(apply str (reverse "hello"))
+;; => "olleh"
+
+(re-seq #"\w+" "the quick brown fox")
+;; => ("the" "quick" "brown" "fox")
+
+(sort (re-seq #"\w+" "the quick brown fox"))
+;; => ("brown" "fox" "quick" "the")
+
+(drop 2 (re-seq #"\w+" "the quick brown fox"))
+;; => ("brown" "fox")
+
+(map str/upper-case (re-seq #"\w+" "the quick brown fox"))
+;; => ("THE" "QUICK" "BROWN" "FOX")
+
+(.listFiles (File. "."))
+;; => #object["[Ljava.io.File;" 0x47127fd3 "[Ljava.io.File;@47127fd3"]
+
+(seq (.listFiles (File. ".")))
+;; => (#object[java.io.File 0x7e70e741 "./.hgignore"] #object[java.io.File 0x7e8154f8 "./test"] #object[java.io.File 0x14cbf97a "./README.md"] #object[java.io.File 0x7f966f12 "./CHANGELOG.md"] #object[java.io.File 0x6a5c54e "./.gitignore"] #object[java.io.File 0x727777f6 "./project.clj"] #object[java.io.File 0x39bc40eb "./doc"] #object[java.io.File 0x759e5631 "./resources"] #object[java.io.File 0x5d397279 "./target"] #object[java.io.File 0x14b866ef "./.nrepl-port"] #object[java.io.File 0x4fd8d78b "./LICENSE"] #object[java.io.File 0x48f02f9f "./src"])
+
+(map #(.getName %) (.listFiles (File. ".")))
+;; => (".hgignore" "test" "README.md" "CHANGELOG.md" ".gitignore" "project.clj" "doc" "resources" "target" ".nrepl-port" "LICENSE" "src")
+
+(count (file-seq (File. ".")))
+;; => 28
+
+(defn minutes-to-millis [mins]
+  (* mins 1000 60))
+
+(defn recently-modified? [file]
+  (> (.lastModified file)
+     (- (System/currentTimeMillis) (minutes-to-millis 30))))
+
+(filter recently-modified? (file-seq (File. ".")))
+;; => (#object[java.io.File 0x25c17498 "."] #object[java.io.File 0x738a5bce "./target"] #object[java.io.File 0x5da4a811 "./target/default"] #object[java.io.File 0x2cfcfa85 "./target/default/classes"] #object[java.io.File 0x54602b2b "./target/default/classes/META-INF"] #object[java.io.File 0x659f865b "./target/default/classes/META-INF/maven"] #object[java.io.File 0x24f139a5 "./target/default/classes/META-INF/maven/ch03-sequences"] #object[java.io.File 0x6f92d76c "./target/default/classes/META-INF/maven/ch03-sequences/ch03-sequences"] #object[java.io.File 0x3a7e80c6 "./target/default/classes/META-INF/maven/ch03-sequences/ch03-sequences/pom.properties"] #object[java.io.File 0x23ca748c "./target/default/stale"] #object[java.io.File 0xedb5d41 "./target/default/stale/leiningen.core.classpath.extract-native-dependencies"] #object[java.io.File 0x778bc241 "./target/default/repl-port"] #object[java.io.File 0x393d04c6 "./.nrepl-port"] #object[java.io.File 0x49236979 "./src/ch03_sequences"] #object[java.io.File 0x1dc61449 "./src/ch03_sequences/core.clj"])
+
+(take 2 (line-seq (io/reader "README.md")))
+;; => ("# ch03-sequences" "")
+
+(with-open [rdr (io/reader "README.md")]
+  (count (line-seq rdr)))
+;; => 44
+
+;; count non blank lines in a file
+(with-open [rdr (io/reader "README.md")]
+  (count (filter #(re-find #"\S" %) (line-seq rdr))))
+;; => 27
+
+(defn non-blank? [line]
+  (not (str/blank? line)))
+
+(defn non-svn? [file]
+  (not (.contains (.toString file) ".svn")))
+
+(defn clojure-source? [file]
+  (.endsWith (.toString file) ".clj"))
+
+(defn clojure-loc [base-file]
+  (reduce
+   +
+   (for [file (file-seq base-file)
+         :when (and (clojure-source? file) (non-svn? file))]
+     (with-open [rdr (io/reader file)]
+       (count (filter non-blank? (line-seq rdr)))))))
+
+(clojure-loc (File. "."))
+;; => 251
+
+(peek '(1 2 3))
+;; => 1
+
+(pop '(1 2 3))
+;; => (2 3)
+
+(peek [1 2 3])
+;; => 3
+
+(pop [1 2 3])
+;; => [1 2]
+
+(assoc [0 1 2 3 4 5] 2 :two)
+;; => [0 1 :two 3 4 5]
+
+;; subvec is much faster and specific for vector
+;; while take and drop is general for any sequences.
+(subvec [1 2 3 4 5] 3)
+;; => [4 5]
+
+(subvec [1 2 3 4 5] 1 3)
+;; => [2 3]
+
+(take 2 (drop 1 [1 2 3 4 5]))
+;; => (2 3)
+
+(def score {:luffy nil :zoro 70})
+
+(:luffy score)
+;; => nil
+
+(get score :luffy :score-not-found)
+;; => nil
+
+(get score :sanji :not-found)
+;; => :not-found
+
+(def song {:name "Agnus Dei"
+           :artist "Penderecki"
+           :album "Polish Requiem"
+           :genre "Classical"})
+
+(assoc song :kind "MPEG audio")
+;; => {:name "Agnus Dei", :artist "Penderecki", :album "Polish Requiem", :genre "Classical", :kind "MPEG audio"}
+
+(dissoc song :genre)
+;; => {:name "Agnus Dei", :artist "Penderecki", :album "Polish Requiem"}
+
+(select-keys song [:name :artist])
+;; => {:name "Agnus Dei", :artist "Penderecki"}
+
+(merge song {:size 12345 :time 32456})
+;; => {:name "Agnus Dei", :artist "Penderecki", :album "Polish Requiem", :genre "Classical", :size 12345, :time 32456}
+
+(merge-with
+ concat
+ {:rubble ["Barney"] :flintstone ["Fred"]}
+ {:rubble ["Betty"] :flintstone ["Wilma"]}
+ {:rubble ["Bambam"] :flintstone ["Pebles"]})
+;; => {:rubble ("Barney" "Betty" "Bambam"), :flintstone ("Fred" "Wilma" "Pebles")}
+
+(def languages #{"java" "c" "d" "clojure"})
+(def beverages #{"java" "chai" "pop"})
+
+(s/union languages beverages)
+;; => #{"d" "clojure" "pop" "java" "chai" "c"}
+
+(s/difference languages beverages)
+;; => #{"d" "clojure" "c"}
+
+(s/intersection languages beverages)
+;; => #{"java"}
+
+(s/select #(= 1 (count %)) languages)
+;; => #{"d" "c"}
+
+(def compositions
+  #{{:name "The art of the fugue" :composer "Bach"}
+    {:name "Musical offering" :composer "Bach"}
+    {:name "Requiem" :composer "Verdi"}
+    {:name "Requiem" :composer "Mozart"}})
+
+(def composers
+  #{{:composer "Bach" :country "Germany"}
+    {:composer "Mozart" :country "Austria"}
+    {:composer "Verdi" :country "Italy"}})
+
+(def nations
+  #{{:nation "Germany" :language "German"}
+    {:nation "Austria" :language "German"}
+    {:nation "Italy" :language "Italian"}})
+
+(s/rename compositions {:name :title})
+;; => #{{:composer "Verdi", :title "Requiem"} {:composer "Bach", :title "The art of the fugue"} {:composer "Mozart", :title "Requiem"} {:composer "Bach", :title "Musical offering"}}
+
+(s/select #(= (:name %) "Requiem") compositions)
+;; => #{{:name "Requiem", :composer "Mozart"} {:name "Requiem", :composer "Verdi"}}
+
+(s/project compositions [:name])
+;; => #{{:name "Musical offering"} {:name "Requiem"} {:name "The art of the fugue"}}
+
+(for [m compositions
+      c composers]
+  (concat m c))
+;; => (([:name "Requiem"] [:composer "Mozart"] [:composer "Bach"] [:country "Germany"]) ([:name "Requiem"] [:composer "Mozart"] [:composer "Mozart"] [:country "Austria"]) ([:name "Requiem"] [:composer "Mozart"] [:composer "Verdi"] [:country "Italy"]) ([:name "Requiem"] [:composer "Verdi"] [:composer "Bach"] [:country "Germany"]) ([:name "Requiem"] [:composer "Verdi"] [:composer "Mozart"] [:country "Austria"]) ([:name "Requiem"] [:composer "Verdi"] [:composer "Verdi"] [:country "Italy"]) ([:name "The art of the fugue"] [:composer "Bach"] [:composer "Bach"] [:country "Germany"]) ([:name "The art of the fugue"] [:composer "Bach"] [:composer "Mozart"] [:country "Austria"]) ([:name "The art of the fugue"] [:composer "Bach"] [:composer "Verdi"] [:country "Italy"]) ([:name "Musical offering"] [:composer "Bach"] [:composer "Bach"] [:country "Germany"]) ([:name "Musical offering"] [:composer "Bach"] [:composer "Mozart"] [:country "Austria"]) ([:name "Musical offering"] [:composer "Bach"] [:composer "Verdi"] [:country "Italy"]))
+
+(s/join compositions composers)
+;; => #{{:composer "Bach", :country "Germany", :name "Musical offering"} {:composer "Verdi", :country "Italy", :name "Requiem"} {:composer "Bach", :country "Germany", :name "The art of the fugue"} {:composer "Mozart", :country "Austria", :name "Requiem"}}
+;; => 
+
+(s/join composers nations {:country :nation})
+;; => #{{:composer "Verdi", :country "Italy", :nation "Italy", :language "Italian"} {:composer "Bach", :country "Germany", :nation "Germany", :language "German"} {:composer "Mozart", :country "Austria", :nation "Austria", :language "German"}}
+
+(s/project
+ (s/join
+  (s/select #(= (:name %) "Requiem") compositions)
+  composers)
+ [:country])
+;; => #{{:country "Italy"} {:country "Austria"}}
