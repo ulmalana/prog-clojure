@@ -216,3 +216,155 @@
 
 (trampoline my-even?'' 1000000)
 ;; => true
+
+
+;; will blow stack
+(declare replace-symbol replace-symbol-expr)
+
+(defn replace-symbol [coll oldsym newsym]
+  (if (empty? coll)
+    ()
+    (cons (replace-symbol-expr (first coll) oldsym newsym)
+          (replace-symbol (rest coll) oldsym newsym))))
+
+(defn replace-symbol-expr [symbol-expr oldsym newsym]
+  (if (symbol? symbol-expr)
+    (if (= symbol-expr oldsym)
+      newsym
+      symbol-expr)
+    (replace-symbol symbol-expr oldsym newsym)))
+
+(defn deeply-nested [n]
+  (loop [n n
+         result '(bottom)]
+    (if (= n 0)
+      result
+      (recur (dec n) (list result)))))
+
+(deeply-nested 5)
+;; => ((((((bottom))))))
+
+(deeply-nested 25)
+;; => ((((((((((((((((((((((((((bottom))))))))))))))))))))))))))
+
+(replace-symbol (deeply-nested 5) 'bottom 'deepest)
+;; => ((((((deepest))))))
+
+(comment
+ (replace-symbol (deeply-nested 100000) 'bottom 'deepest)
+ ;; Execution error (StackOverflowError) at ch04-fp.core/replace-symbol (form-init15987135216163020431.clj:223).
+ ;; null
+ )
+
+(defn- coll-or-scalar [x & _]
+  (if (coll? x)
+    :collection
+    :scalar))
+
+(defmulti replace-symbol' coll-or-scalar)
+
+(defmethod replace-symbol' :collection [coll oldsym newsym]
+  (lazy-seq
+   (when (seq coll)
+     (cons (replace-symbol' (first coll) oldsym newsym)
+           (replace-symbol' (rest coll) oldsym newsym)))))
+
+(defmethod replace-symbol' :scalar [obj oldsym newsym]
+  (if (= obj oldsym)
+    newsym
+    obj))
+
+(set! *print-level* 25)
+
+(replace-symbol' (deeply-nested 100000) 'bottom 'deepest)
+;; => (((((((((((((((((((((((((#)))))))))))))))))))))))))
+
+;;; male female sequences
+(declare m f)
+(defn m [n]
+  (if (zero? n)
+    0
+    (- n (f (m (dec n))))))
+
+(defn f [n]
+  (if (zero? n)
+    1
+    (- n (m (f (dec n))))))
+
+(comment
+  (time (m 250))
+  ;; "Elapsed time: 118363.538065 msecs"
+  ;; => 155
+  )
+
+(def m (memoize m))
+(def f (memoize f))
+
+(comment
+  (def m (memoize m))
+  (def f (memoize f))
+  )
+
+(comment
+  (time (m 250))
+  ;; Execution error (StackOverflowError) at ch04-fp.core/m (core.clj:287).
+  ;; null
+  )
+;;(time (m 250))
+
+(def m-seq (map m (iterate inc 0)))
+(def f-seq (map f (iterate inc 0)))
+
+(nth m-seq 250)
+;; => 155
+
+(time (nth m-seq 10000))
+;; Elapsed time: 34.617402 msecs
+;; => 6180
+
+;;; eager
+(defn square [x]
+  (* x x))
+
+(defn sum-squares-seq [n]
+  (vec (map square (range n))))
+
+(defn sum-squares [n]
+  (into [] (map square) (range n)))
+
+(defn preds-seq []
+  (->> (all-ns)
+       (map ns-publics)
+       (mapcat vals)
+       (filter #(clojure.string/ends-with? % "?"))
+       (map #(str (.-sym %)))
+       vec))
+
+(defn preds []
+  (into []
+        (comp (map ns-publics)
+              (mapcat vals)
+              (filter #(clojure.string/ends-with? % "?"))
+              (map #(str (.-sym %))))
+        (all-ns)))
+
+(defn non-blank? [s]
+  (not (clojure.string/blank? s)))
+
+(defn non-blank-lines-seq [file-name]
+  (let [reader (clojure.java.io/reader file-name)]
+    (filter non-blank? (line-seq reader))))
+
+(defn non-blank-lines [file-name]
+  (with-open [reader (clojure.java.io/reader file-name)]
+    (into [] (filter non-blank?) (line-seq reader))))
+
+(defn non-blank-lines-eduction [reader]
+  (eduction (filter non-blank?) (line-seq reader)))
+
+(defn line-count [file-name]
+  (with-open [reader (clojure.java.io/reader file-name)]
+    (reduce
+     (fn [cnt el] (inc cnt))
+     0
+     (non-blank-lines-eduction reader))))
