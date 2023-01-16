@@ -1,0 +1,1 @@
+(#ch06_state_concurrency.core.Message{:sender "jane", :text "message 2"} #ch06_state_concurrency.core.Message{:sender "john", :text "message 1"} #ch06_state_concurrency.core.Message{:sender "user 3", :text "test message"})
