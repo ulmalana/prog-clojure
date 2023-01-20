@@ -67,3 +67,90 @@
 
 (macroexpand-1 '(when-not false (print "1") (print "2")))
 ;; => (if false nil (do (print "1") (print "2")))
+
+;;; making macros simpler
+;; chain is similar to .. macro
+(defmacro chain
+  ([x form] (list '. x form))
+  ([x form & more] (concat (list 'chain (list '. x form)) more)))
+
+(macroexpand '(chain arm getHand))
+;; => (. arm getHand)
+
+(macroexpand '(chain arm getHand getFinger))
+;; => (. (. arm getHand) getFinger)
+
+(defmacro chain [x form]
+  `(. ~x ~form))
+
+(macroexpand '(chain arm getHand))
+;; => (. arm getHand)
+
+;; not work well
+(defmacro chain
+  ([x form] `(. ~x ~form))
+  ([x form & more] `(chain (. ~x ~form) ~more)))
+
+(macroexpand '(chain arm getHand getFinger))
+;; => (. (. arm getHand) (getFinger)) ;; getFinger is in a list
+
+;; works better with splicing
+(defmacro chain
+  ([x form] `(. ~x ~form))
+  ([x form & more] `(chain (. ~x ~form) ~@more)))
+
+(macroexpand '(chain arm getHand getFinger))
+;; => (. (. arm getHand) getFinger)
+
+;;; introducing names in macros
+;; bench is similar to time macro
+
+;; wont work
+(defmacro bench [expr]
+  `(let [start (System/nanoTime)
+         result ~expr]
+     {:result result :elapsed (- (System/nanoTime) start)}))
+
+(comment
+  (bench (str "a" "b"))
+  ;; Syntax error macroexpanding clojure.core/let at (*cider-repl prog-clojure/ch08-macro:localhost:41031(clj)*:47:18).
+  ;; ch08-macro.core/start - failed: simple-symbol? at: [:bindings :form :local-symbol] spec: :clojure.core.specs.alpha/local-name
+  ;; ch08-macro.core/start - failed: vector? at: [:bindings :form :seq-destructure] spec: :clojure.core.specs.alpha/seq-binding-form
+  ;; ch08-macro.core/start - failed: map? at: [:bindings :form :map-destructure] spec: :clojure.core.specs.alpha/map-bindings
+  ;; ch08-macro.core/start - failed: map? at: [:bindings :form :map-destructure] spec: :clojure.core.specs.alpha/map-special-binding
+  )
+
+(macroexpand-1 '(bench (str "a" "b")))
+(comment ;; return value
+  (clojure.core/let
+      [ch08-macro.core/start (java.lang.System/nanoTime)
+       ch08-macro.core/result (str "a" "b")]
+    {:result ch08-macro.core/result,
+     :elapsed (clojure.core/- (java.lang.System/nanoTime) ch08-macro.core/start)}))
+
+;; correct bench
+(defmacro bench [expr]
+  `(let [start# (System/nanoTime)
+         result# ~expr]
+     {:result result# :elapsed (- (System/nanoTime) start#)}))
+
+(bench (str "a" "b"))
+;; => {:result "ab", :elapsed 69104}
+
+(macroexpand-1 '(bench (str "a" "b")))
+(comment
+  (clojure.core/let
+      [start__7898__auto__ (java.lang.System/nanoTime)
+       result__7899__auto__ (str "a" "b")]
+    {:result result__7899__auto__,
+     :elapsed (clojure.core/- (java.lang.System/nanoTime) start__7898__auto__)}))
+
+;;; taxonomy
+(def slow-calc (delay (Thread/sleep 3000) "done!"))
+;; => #'ch08-macro.core/slow-calc
+
+(force slow-calc)
+;; => "done!"
+
+(force slow-calc)
+;; => "done!"
