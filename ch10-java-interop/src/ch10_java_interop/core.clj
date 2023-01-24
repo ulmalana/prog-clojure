@@ -114,3 +114,158 @@
 
 (class-available? "haha.hehe")
 ;; => false
+
+;;; optimization
+
+;; adding type hints
+(defn describe-class [c]
+  {:name (.getName c)
+   :final (java.lang.reflect.Modifier/isFinal (.getModifiers c))})
+;; => #'ch10-java-interop.core/describe-class
+
+(set! *warn-on-reflection* true)
+
+;; compiling describe-class will produce:
+(comment
+  ;; Reflection warning, /home/riz/prog-clojure/ch10-java-interop/src/ch10_java_interop/core.clj:122:10 - reference to field getName can't be resolved.
+  ;; Reflection warning, /home/riz/prog-clojure/ch10-java-interop/src/ch10_java_interop/core.clj:123:47 - reference to field getModifiers can't be resolved.
+  )
+
+;; with type hints to remove warning
+(defn describe-class [^Class c]
+  {:name (.getName c)
+   :final (java.lang.reflect.Modifier/isFinal (.getModifiers c))})
+;; => #'ch10-java-interop.core/describe-class
+
+(describe-class StringBuffer)
+;; => {:name "java.lang.StringBuffer", :final true}
+
+(comment
+  (describe-class "bar")
+  ;; Execution error (ClassCastException) at ch10-java-interop.core/describe-class (form-init17039568491775200357.clj:135).
+  ;; class java.lang.String cannot be cast to class java.lang.Class (java.lang.String and java.lang.Class are in module java.base of loader 'bootstrap')
+  )
+
+(defn want-a-string [^String s]
+  (println s))
+
+(want-a-string "foo")
+;; foo
+;; => nil
+(want-a-string 10)
+;; 10
+;; => nil
+
+;; integer math
+;; unchecked operators are fast but may overflow. use cautiosly.
+(unchecked-add 9223372036854775807 1)
+;; => -9223372036854775808
+
+(comment
+  (+ 9223372036854775807 1) ;; will overflow
+  ;; Execution error (ArithmeticException) at ch10-java-interop.core/eval7863 (form-init17039568491775200357.clj:164).
+  ;; integer overflow
+  )
+
+(+' 9223372036854775807 1)
+;; => 9223372036854775808N
+
+;; using primitives for performance
+
+;; demo only
+(defn sum-to [n]
+  (loop [i 1
+         sum 0]
+    (if (<= i n)
+      (recur (inc i) (+ i sum))
+      sum)))
+
+(sum-to 10)
+;; => 55
+
+(dotimes [_ 5] (time (sum-to 100000)))
+;; "Elapsed time: 13.559515 msecs"
+;; "Elapsed time: 2.756383 msecs"
+;; "Elapsed time: 2.645531 msecs"
+;; "Elapsed time: 2.694326 msecs"
+;; "Elapsed time: 2.652738 msecs"
+;; => nil
+
+;; with type hints
+(defn integer-sum-to ^long [^long n]
+  (loop [i 1
+         sum 0]
+    (if (<= i n)
+      (recur (inc i) (+ i sum))
+      sum)))
+
+(dotimes [_ 5] (time (integer-sum-to 100000)))
+;; "Elapsed time: 9.370161 msecs"
+;; "Elapsed time: 0.125435 msecs"
+;; "Elapsed time: 0.198623 msecs"
+;; "Elapsed time: 0.124353 msecs"
+;; "Elapsed time: 0.178495 msecs"
+;; => nil
+
+(defn unchecked-sum-to ^long [^long n]
+  (loop [i 1
+         sum 0]
+    (if (<= i n)
+      (recur (inc i) (unchecked-add i sum))
+      sum)))
+
+;; unchecked operators are fast with possible data corruption
+(dotimes [_ 5] (time (unchecked-sum-to 100000)))
+"Elapsed time: 8.248158 msecs"
+"Elapsed time: 0.078117 msecs"
+"Elapsed time: 0.076303 msecs"
+"Elapsed time: 0.074881 msecs"
+"Elapsed time: 0.075452 msecs"
+nil
+
+(defn better-sum-to [n]
+  (reduce + (range 1 (inc n))))
+
+(defn best-sum-to [n]
+  (/ (* n (inc n)) 2))
+
+(dotimes [_ 5] (time (best-sum-to 100000)))
+;; "Elapsed time: 0.068178 msecs"
+;; "Elapsed time: 0.00491 msecs"
+;; "Elapsed time: 0.004408 msecs"
+;; "Elapsed time: 0.004629 msecs"
+;; "Elapsed time: 0.004258 msecs"
+;; => nil
+
+;; java array
+(make-array String 5)
+;; => #object["[Ljava.lang.String;" 0x54417e3c "[Ljava.lang.String;@54417e3c"]
+
+(seq (make-array String 5))
+;; => (nil nil nil nil nil)
+
+(defn painstakingly-create-array []
+  (let [arr (make-array String 5)]
+    (aset arr 0 "Painstaking")
+    (aset arr 1 "to")
+    (aset arr 2 "fill")
+    (aset arr 3 "in")
+    (aset arr 4 "arrays")
+    arr))
+
+(aget (painstakingly-create-array) 0)
+;; => "Painstaking"
+
+(alength (painstakingly-create-array))
+;; => 5
+
+(to-array ["easier" "array" "creation"])
+;; => #object["[Ljava.lang.Object;" 0x1f05ed0e "[Ljava.lang.Object;@1f05ed0e"]
+
+(def strings (into-array ["some" "strings" "here"]))
+
+(seq (amap strings idx _ (.toUpperCase (aget strings idx))))
+;; => ("SOME" "STRINGS" "HERE")
+
+(areduce strings idx ret 0 (max ret (.length (aget strings idx))))
+;; => 7
